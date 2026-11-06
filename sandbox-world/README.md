@@ -28,13 +28,30 @@ npm run verify         # import graph + 77 physics tests + both boot checks
 npm run boot void      # headless: load the real page, run its frames, assert its laws
 ```
 
-No build step, no bundler, no CDN. `three.js` r169 is vendored in `vendor/`.
+No build step, no bundler, no CDN, and **no `dependencies` field in `package.json`**: `three.js`
+r169 is vendored in `vendor/`, and each page maps it there with its own
+`<script type="importmap">`. That map is the single source of truth for resolution —
+`tools/boot-loader.mjs` reads it out of the HTML instead of duplicating it, so Node and Chrome
+resolve the identical files. An npm-installed `three` is not just unnecessary here, it is a bug
+waiting to happen: the harness quietly passed for a while against `node_modules/three` while the
+browser used the vendored copy, which meant the shipped copy was never the tested copy. If you
+see a `dependencies` entry reappear, delete it and let `vendor/` answer.
 
 **Portable.** `cp -R sandbox-world ../void && cd ../void && npm run serve` works from any
 folder, in this container or anywhere else with Node — the artifact is the folder, not the
-server. To take it further: `bash tools/package-standalone.sh` writes a zip with its own
-`README` (one-file HTML build included, `tools/build-onefile.mjs`), and drag either onto
-[html.sh](https://html.sh) or any static host to open it on a phone or a headset. WebXR is
+server. To take it further — write the bundle outside the repo, so a build product never becomes a tracked file:
+
+```bash
+bash tools/package-standalone.sh ~/arcane-physics-standalone.zip
+```
+
+It runs `npm run verify`, re-extracts the result somewhere else and runs `npm run verify` *there*, and **refuses to
+produce it unless the bundle passes `npm run verify` after being extracted into a fresh
+directory** — portability that is tested, not asserted. Two honest caveats it writes into the
+bundle's own README: ES modules will not load from `file://` (no origin to grant CORS), so a
+double-clicked `index.html` is blank in any mainstream browser and needs a static server; and
+`universe.json` is deliberately excluded, since an absent charter means "nothing exists yet",
+which is the state this ships in. WebXR is
 wired (`ENTER VR` appears when a headset is present) but **cannot be verified here** — this
 sandbox has no GPU, no browser, no display. What is verified is the physics, the render-loop
 contract, and the accounting; the pixels are yours to look at.

@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "version": "0.1.0",
-  "description": "A fantasy world that obeys real physical law, served from an OpenSandbox-style sandbox.",
+  "description": "A void that contains only what you create, and a world inside it, both obeying real physical law. Zero dependencies: three.js is vendored.",
   "scripts": {
     "serve": "node srv/serve.mjs",
     "test": "node --test tests/physics.test.mjs tests/gameplay.soak.test.mjs tests/void.test.mjs",
@@ -11,11 +11,9 @@
     "boot": "node tools/boot-check.mjs void && node tools/boot-check.mjs archipelago",
     "verify": "npm run check && npm test && npm run boot"
   },
-  "dependencies": {
-    "three": "^0.169.0"
-  },
   "files": [
     "index.html",
+    "archipelago.html",
     "src",
     "vendor",
     "srv",

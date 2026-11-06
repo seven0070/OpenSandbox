@@ -28,8 +28,25 @@ if (!APP) {
   process.exit(2);
 }
 globalThis.__bootRoot = ROOT;
+/* The import map is read from the page under test, not duplicated here: if a
+ * page's map ever disagrees with its imports, the boot check fails, which is
+ * the point of running the real module graph. */
+const pageHtml = await readFile(resolve(ROOT, APP.html), 'utf8');
+const mapTag = /<script[^>]*type=["']importmap["'][^>]*>([\s\S]*?)<\/script>/.exec(pageHtml);
+let pageImports;
+try {
+  pageImports = mapTag ? JSON.parse(mapTag[1]).imports : null;
+} catch (e) {
+  console.error(`✗ ${APP.html} has an import map that is not valid JSON: ${e.message}`);
+  process.exit(1);
+}
+if (!pageImports?.three) {
+  console.error(`✗ ${APP.html} declares no import map for 'three' — the harness cannot resolve its modules`);
+  process.exit(1);
+}
+console.log(`  import map from ${APP.html}: ${JSON.stringify(pageImports)}`);
 register(pathToFileURL(resolve(ROOT, 'tools/boot-loader.mjs')).href, import.meta.url, {
-  data: { root: ROOT },
+  data: { root: ROOT, imports: pageImports },
 });
 
 // --- clock: the sim reads performance.now(), so a synchronous loop still

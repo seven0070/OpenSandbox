@@ -8,21 +8,52 @@
  * this file only supplies the class it is not allowed to build here.
  */
 let root = process.cwd();
+/** The page's own <script type="importmap">, handed to us by boot-check. */
+let imports = {};
 
 export function initialize(data) {
   if (data?.root) root = data.root;
+  if (data?.imports) imports = data.imports;
 }
 
 const SHIM = 'virtual:three-headless';
+const base = () => new URL(`file://${root}/`);
+
+/**
+ * Longest-prefix match, exactly as a browser import map does it: 'three' is an
+ * exact key, 'three/addons/' is a prefix key. Resolving these here by hand was
+ * the old bug — the harness knew only 'three', so `three/addons/objects/Sky.js`
+ * fell through to Node's package resolution and quietly worked ONLY because a
+ * 29 MB node_modules/three happened to exist in the folder. The bundle excludes
+ * node_modules, so the packaged world could not run its own boot check, and the
+ * vendored copy that the browser really uses was never the one under test.
+ */
+function mapSpecifier(specifier) {
+  let best = null;
+  for (const key of Object.keys(imports)) {
+    const hit = specifier === key || (key.endsWith('/') && specifier.startsWith(key));
+    if (hit && (!best || key.length > best.length)) best = key;
+  }
+  if (!best) return null;
+  const target = imports[best];
+  if (!target.startsWith('./') && !target.startsWith('/')) return null; // a real package, not ours to resolve
+  const rest = specifier.slice(best.length);
+  const rel = target.startsWith('./') ? target.slice(2) : target.replace(/^\/+/, '');
+  return new URL(rel + rest, base()).href;
+}
 
 export async function resolve(specifier, context, nextResolve) {
-  if (specifier === 'three') return { url: SHIM, shortCircuit: true };
-  return nextResolve(specifier, context);
+  const mapped = mapSpecifier(specifier);
+  if (!mapped) return nextResolve(specifier, context);
+  // three goes through the shim, because exactly one of its classes cannot
+  // exist here; its addons are loaded from vendor, unmodified, like the browser.
+  if (mapped.endsWith('/three.module.js')) return { url: SHIM, shortCircuit: true };
+  return { url: mapped, shortCircuit: true };
 }
 
 export async function load(url, context, nextLoad) {
   if (url !== SHIM) return nextLoad(url, context);
-  const real = new URL('vendor/three.module.js', `file://${root}/`).href;
+  const real = mapSpecifier('three') ?? new URL('vendor/three.module.js', base()).href;
   return {
     format: 'module',
     shortCircuit: true,
