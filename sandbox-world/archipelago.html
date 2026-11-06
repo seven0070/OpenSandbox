@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>ARCANE PHYSICS — a fantasy world that pays its debts</title>
+    <meta name="description" content="A virtual world where floating islands, spells and two moons all obey gravity, thermodynamics, optics and conservation of momentum." />
+    <style>
+      :root {
+        --ink: #e8e2d0;
+        --amber: #f0b45a;
+        --cyan: #7fe3d4;
+        --rose: #ff8f7a;
+        --bg: #05070c;
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0; height: 100%; background: var(--bg); color: var(--ink);
+        font: 13px/1.45 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        overflow: hidden; -webkit-font-smoothing: antialiased;
+      }
+      canvas { display: block; }
+      #hud {
+        position: fixed; inset: 0; pointer-events: none; z-index: 10;
+        display: grid; grid-template-rows: auto 1fr auto;
+        padding: 14px; gap: 10px;
+      }
+      .row { display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
+      .card {
+        background: rgba(6, 9, 16, 0.62); border: 1px solid rgba(240, 180, 90, 0.22);
+        border-radius: 10px; padding: 10px 12px; backdrop-filter: blur(9px) saturate(1.2);
+        box-shadow: 0 8px 34px rgba(0, 0, 0, 0.55); max-width: 44ch;
+      }
+      .card h1 { font-size: 12px; margin: 0 0 6px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--amber); font-weight: 600; }
+      .card h1 small { color: #8b8571; letter-spacing: 0.04em; text-transform: none; font-weight: 400; margin-left: 6px; }
+      .kv { display: grid; grid-template-columns: auto 1fr; gap: 1px 12px; font-variant-numeric: tabular-nums; }
+      .kv dt { color: #8b8571; }
+      .kv dd { margin: 0; text-align: right; }
+      .bar { height: 5px; border-radius: 3px; background: rgba(255,255,255,0.1); overflow: hidden; margin-top: 7px; }
+      .bar > i { display: block; height: 100%; background: linear-gradient(90deg, var(--cyan), var(--amber)); transition: width 0.12s linear; }
+      .bar.heat > i { background: linear-gradient(90deg, #5f7bff, var(--rose)); }
+      #law { color: var(--cyan); }
+      #law.bad { color: #ff5d5d; }
+      #crosshair { position: fixed; left: 50%; top: 50%; width: 18px; height: 18px; margin: -9px; z-index: 11; pointer-events: none; opacity: 0.8; }
+      #crosshair:before, #crosshair:after { content: ""; position: absolute; background: var(--ink); }
+      #crosshair:before { left: 8px; top: 0; width: 1px; height: 18px; }
+      #crosshair:after { top: 8px; left: 0; height: 1px; width: 18px; }
+      #toast {
+        position: fixed; left: 50%; bottom: 92px; transform: translateX(-50%);
+        background: rgba(6,9,16,0.86); border: 1px solid rgba(127,227,212,0.35); color: var(--cyan);
+        padding: 8px 14px; border-radius: 999px; opacity: 0; transition: opacity 0.25s; z-index: 12;
+        pointer-events: none; white-space: nowrap; font-size: 12px;
+      }
+      #toast.show { opacity: 1; }
+      #keys { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 10; display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; pointer-events: none; }
+      kbd {
+        background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.14); border-bottom-width: 2px;
+        border-radius: 5px; padding: 2px 7px; font: inherit; font-size: 11px; color: #cfc9b6;
+      }
+      kbd b { color: var(--amber); font-weight: 600; }
+      #gate {
+        position: fixed; inset: 0; z-index: 30; display: grid; place-items: center;
+        background: radial-gradient(1200px 700px at 50% 40%, #101a2e 0%, #05070c 70%);
+        transition: opacity 0.5s; text-align: center; padding: 24px;
+      }
+      #gate.hidden { opacity: 0; pointer-events: none; }
+      #gate .inner { max-width: 56ch; }
+      #gate .title { font-size: clamp(26px, 6vw, 46px); letter-spacing: 0.22em; color: var(--amber); margin: 0 0 6px; font-weight: 300; text-transform: uppercase; }
+      #gate .sub { color: #a49d86; margin: 0 0 22px; font-size: 13px; }
+      #gate .laws { text-align: left; margin: 0 auto 22px; max-width: 46ch; color: #b9b2a0; }
+      #gate .laws li { margin: 3px 0; }
+      #gate .laws b { color: var(--cyan); font-weight: 600; }
+      button.go {
+        pointer-events: auto; cursor: pointer; font: inherit; font-size: 14px; letter-spacing: 0.1em;
+        text-transform: uppercase; color: #06080e; background: var(--amber); border: 0;
+        padding: 12px 26px; border-radius: 999px; font-weight: 700;
+        box-shadow: 0 0 40px rgba(240,180,90,0.35);
+      }
+      button.go:hover { filter: brightness(1.08); }
+      button.ghost { background: transparent; color: var(--ink); border: 1px solid rgba(255,255,255,0.22); box-shadow: none; }
+      #err { position: fixed; left: 12px; bottom: 12px; z-index: 40; color: #ff9a9a; max-width: 70ch; font-size: 11px; white-space: pre-wrap; }
+    </style>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "./vendor/three.module.js",
+          "three/addons/": "./vendor/addons/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <div id="hud">
+      <div class="row">
+        <section class="card" id="panel-body">
+          <h1>Body <small>live state</small></h1>
+          <dl class="kv">
+            <dt>speed</dt><dd id="v-speed">—</dd>
+            <dt>altitude</dt><dd id="v-alt">—</dd>
+            <dt>gravity felt</dt><dd id="v-g">—</dd>
+            <dt>kinetic</dt><dd id="v-ke">—</dd>
+            <dt>potential</dt><dd id="v-pe">—</dd>
+          </dl>
+        </section>
+        <section class="card" id="panel-ledger">
+          <h1>Ledger <small>energy must come from somewhere</small></h1>
+          <dl class="kv">
+            <dt>stored</dt><dd id="v-store">—</dd>
+            <dt>as heat</dt><dd id="v-heat">—</dd>
+            <dt>as light</dt><dd id="v-rad">—</dd>
+            <dt>audit drift</dt><dd id="law">—</dd>
+          </dl>
+          <div class="bar"><i id="bar-charge" style="width:100%"></i></div>
+          <div class="bar heat"><i id="bar-heat" style="width:0%"></i></div>
+        </section>
+      </div>
+      <div></div>
+      <div class="row" style="align-items:flex-end">
+        <section class="card">
+          <h1>World <small>conserved, not decorated</small></h1>
+          <dl class="kv">
+            <dt>bodies</dt><dd id="v-n">—</dd>
+            <dt>contacts/s</dt><dd id="v-cps">—</dd>
+            <dt>universe total E</dt><dd id="v-total">—</dd>
+            <dt>island charge left</dt><dd id="v-island">—</dd>
+            <dt>fps / physics steps</dt><dd id="v-fps">—</dd>
+          </dl>
+        </section>
+        <section class="card" style="text-align:right">
+          <h1>Terminal velocity <small>rain, 2 mm drops</small></h1>
+          <dl class="kv">
+            <dt>falling speed</dt><dd id="v-rain">—</dd>
+            <dt>ceiling</dt><dd id="v-vterm">—</dd>
+          </dl>
+        </section>
+      </div>
+    </div>
+    <div id="crosshair"></div>
+    <div id="toast"></div>
+    <div id="keys">
+      <kbd><b>WASD</b> walk</kbd><kbd><b>Space</b> jump</kbd><kbd><b>Click</b> lance (recoil!)</kbd>
+      <kbd><b>F</b> light orb</kbd><kbd><b>G</b> freeze water</kbd><kbd><b>H</b> lift rock</kbd>
+      <kbd><b>T</b> drop feather + anvil</kbd><kbd><b>P</b> scatter 30 stones</kbd><kbd><b>R</b> reset</kbd>
+    </div>
+    <div id="gate">
+      <div class="inner">
+        <p class="title">Arcane Physics</p>
+        <p class="sub">A fantasy world that keeps its laws. Enter a place where islands float, moons pull the sea,
+          and every spell sends you an invoice.</p>
+        <ul class="laws">
+          <li><b>Gravity</b> is Newtonian. The moons tug you with ~10<sup>-4</sup> m/s² and raise real tides.</li>
+          <li><b>Spells are transducers, not sources.</b> Run out of joules and the light dims, the lift fails, the shot misfires.</li>
+          <li><b>Momentum is owed.</b> A kinetic lance throws you backwards by exactly m·v.</li>
+          <li><b>Falling bodies are equal.</b> A feather and an anvil land together, because drag is the only thing that ever disagreed.</li>
+          <li><b>Nothing is deleted.</b> Lost impact energy reappears as heat, and the ledger audits it live. Break a law and the HUD goes red.</li>
+        </ul>
+        <p style="margin-bottom:18px">
+          <button class="go" id="enter">Enter on foot</button>
+          <button class="go ghost" id="enter-vr">Enter in VR</button>
+        </p>
+        <p style="color:#6f6a5b;font-size:11px;margin:0">Desktop: WASD + mouse look, Escape to release.
+          Headset: thumbstick to walk, trigger to cast. Physics verified by 36 headless assertions — see <code>npm test</code>.</p>
+      </div>
+    </div>
+    <div id="err"></div>
+    <script type="module" src="./src/archipelago.js"></script>
+  </body>
+</html>

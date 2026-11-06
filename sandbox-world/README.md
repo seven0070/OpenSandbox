@@ -1,112 +1,171 @@
-# Arcane Physics — a fantasy world that pays its debts
+# The Void
 
-A first-person (and WebXR-capable) virtual world where floating islands, two moons,
-kinetic spells and a heat-pumping freeze ray all obey real physical law. Nothing here
-is a physics *imitation*: gravity, drag, buoyancy, collisions, optics, thermodynamics
-and an energy ledger live in one pure module that is unit-tested head-less. The renderer
-is a viewer for that module, not a second simulation.
+> *Build me a virtual world, a VR, that obeys the laws of reality but is a fantasy.*
+> *Build a universe which shapes to how I would want it inside the sandbox.*
 
-```
-sandbox-world/
-├── index.html              the shell + HUD + import map          (no build step)
-├── src/
-│   ├── physics.js          THE LAWS. pure, no DOM, no deps       (tested)
-│   ├── fantasy.js          THE IMPOSSIBLE, PRICED. spells as transducers (tested)
-│   └── main.js             three.js viewer, player, HUD, XR
-├── vendor/                 three r169 + Sky/Water addons, local  (no CDN)
-├── srv/serve.mjs           60-line static server
-├── tests/                  41 assertions: law suite + 60 s gameplay soak
-└── tools/                  import-graph check + headless boot harness
-```
+Two pages, one kernel.
+
+| page | what it is |
+|---|---|
+| `index.html` | **the void** — nothing exists. No ground, no sky, no sun, no down, and no time until something changes. You create everything. |
+| `archipelago.html` | **a created world** — a lava archipelago with a sea and a low sun. The same physics, pre-populated. It is also one button inside the void: `archipelago` declares that whole world as a single act of creation. |
+
+The premise, stated as a rule:
+
+**Fantasy is content. The laws are contracts.**
+
+Anything you want is allowed; nothing is free of consequence. Creation is free — you, the creator, are not billed, and no one is in charge of your gravity except you. Governance is not free: a created thing is not editable. `mutate` is refused by the kernel, not discouraged by a UI.
+
+---
 
 ## Run it
 
 ```bash
 cd sandbox-world
-npm run serve            # → http://localhost:8765   (PORT= to change)
-npm test                 # 41 headless assertions on the laws themselves
-npm run verify           # import graph + tests + headless boot of the real app
+npm run serve          # http://localhost:8765/          (the void)
+                       # http://localhost:8765/archipelago.html  (a created world)
+npm run verify         # import graph + 77 physics tests + both boot checks
+npm run boot void      # headless: load the real page, run its frames, assert its laws
 ```
 
-No install is needed to *run* the world: `vendor/` is committed alongside it and there
-is no bundler, so `python3 -m http.server` in this folder works identically.
-`npm install` is only needed if you want to bump `three`.
+No build step, no bundler, no CDN. `three.js` r169 is vendored in `vendor/`.
 
-**You cannot open `index.html` with a double-click.** ES modules and the import map are
-subject to the origin rules, so `file://` will refuse to load them. Any static file
-server is enough.
+**Portable.** `cp -R sandbox-world ../void && cd ../void && npm run serve` works from any
+folder, in this container or anywhere else with Node — the artifact is the folder, not the
+server. To take it further: `bash tools/package-standalone.sh` writes a zip with its own
+`README` (one-file HTML build included, `tools/build-onefile.mjs`), and drag either onto
+[html.sh](https://html.sh) or any static host to open it on a phone or a headset. WebXR is
+wired (`ENTER VR` appears when a headset is present) but **cannot be verified here** — this
+sandbox has no GPU, no browser, no display. What is verified is the physics, the render-loop
+contract, and the accounting; the pixels are yours to look at.
 
-## Take it elsewhere
+## The void page
 
-The folder is the artifact. It has one third-party dependency, vendored, and zero build
-output, so these all work unchanged:
+**You.** A 90 kg body with no ground under it, 40 kg of reaction mass, and a suit that throws
+mass instead of pushing on things. `W A S D Q E` thrust, `Shift` harder, `Space` brake. On the
+archipelago, `W` pushes against rock at 4.2 m/s; here it ejects 0.5 kg of propellant at 3 km/s
+and buys you Δv = v_e·ln(90/89.5) = **16.7 m/s** — the Tsiolkovsky rocket equation is the only
+means of locomotion, and the 40 kg is all you get. The exhaust is a real body in the world,
+carrying the opposite momentum; momentum balance is asserted to 0.0e+0.
 
-| Target | What to do |
+**Palette.** Nineteen archetypes (`src/genesis.js`): pebble, boulder, gravel-world, moonlet,
+moon, Mars-world, ocean, super-Earth, Earth-analog, gas giant, rock star, brown dwarf, white
+dwarf, neutron star, black hole, molecular cloud, nebula, comet, candle. Click one and it is
+made in front of you. Big things are made *far* from you on purpose: `defaultRange()` puts a star
+4×10⁸ m out and a planet 4×10⁶ m out, because spawning a 2×10³⁰ kg star on your own position is
+not creation, it is an execution — and gravity does not care about your intentions.
+
+**Console.** Everything the buttons do is a line of text, and the text is the more honest path:
+
+```
+create star name sol
+create earthlike name terra at 1.496e11 0 0 orbit sol
+create gasgiant name jup at 7.78e11 0 0 orbit sol
+make 400 pebble                        12.7 m/s²
+erase terra
+spec gravity 9.81                      write a number onto the world
+spec ground -4000                        it will not be believed
+history                                the ledger, with drift
+archipelago | void                       declare that world, or erase everything
+```
+
+`resolve()` in `src/genesis.js` turns `orbit sol` into the circular velocity at that radius, and
+refuses a request that would place a planet inside its star.
+
+**Time.** `World.advance()` asks `activity()` first: masses moving, light being emitted, heat
+flowing, charge being spent. An unchanged void returns zero, so nothing accrues — the clock is
+relational, not a stream. Create a warm body and `evolving` flips to true on its own, because a
+300 K pebble in a 2.725 K universe *is* changing: it radiates. Erase everything and `time` stops
+where it was. `timeline()` is the record of your acts, which is the only clock that means anything
+here.
+
+**Light and heat are the same law.** Colour comes from `blackbodyColor(T)` (Helland's fit to
+Planck), so a 2000 K ember is red and a 30000 K star is blue-white without anyone writing that
+down; `luminosity = 4πR²σT⁴` sets each body's real wattage, and the six brightest become actual
+`PointLight`s with `decay: 2` — inverse square, as written — and `distance: 0`, so light does not
+stop existing at an arbitrary radius. The intensity you see is `0.0016 · L^0.34`: a **log
+compression**, disclosed on the page, because a sun at true brightness is a white screen and a
+black hole at true darkness is invisible.
+
+**Your body is drawn by the same law.** No `bodyColor` table exists; the palette you see is
+temperature, from the same function as the sky.
+
+## Shaping from outside: `universe.json` is the charter
+
+`universe.json` (gitignored — it is *your* universe, not part of the artifact) is what the page
+saves and loads:
+
+```json
+{ "spec": { "mode": "void", "gravity": 0, "ambientT": 2.725 },
+  "created": [ { "kind": "star", "name": "sol", "mass": 1.98892e30, … } ] }
+```
+
+* The page POSTs it on `save`, and `srv/serve.mjs` writes it and broadcasts on
+  `GET /events` (Server-Sent Events).
+* Edit or delete the file in the workspace — or ask me to write it in chat — and every open page
+  reloads that universe within a second. `rm universe.json` is "back to nothing".
+* Absent file = empty universe. That is why the repo ships without one.
+
+So "shapes to how I would want it" is not a metaphor: the running world is a file, and a file is
+something you can write from anywhere. A charter that is not valid JSON is refused with 400 and
+never written, so a typo in an editor cannot brick a universe — and the round trip is asserted
+lossless (`tests/void.test.mjs`), including atmospheres, which is exactly where that test caught a
+real bug: a saved `{ mass, material }` atmosphere was being handed to the pressure formula as an
+object and came back as NaN air.
+
+## What is real here
+
+`src/physics.js` is the kernel: dependency-free, no `three.js` import, no DOM, no `Math.random`,
+and every constant named with its source. `tests/` (77 assertions) check it against textbook
+values, not against snapshots of itself.
+
+| you are told | because |
 |---|---|
-| Any static host / GitHub Pages | drop the folder, serve `/index.html` |
-| itch.io | zip the folder, mark it "html5, plays in browser" |
-| Your own box | `npm run serve` behind any reverse proxy |
-| A headset | serve it over **HTTPS** on the LAN, open in Quest Browser / Wolvic, press *Enter in VR* |
-| Another repo / project | copy `src/physics.js` + `src/fantasy.js`; they import nothing |
-| A server-side simulation | import `src/physics.js` from Node — it is engine-agnostic and has no `window` references |
+| `9.821 m/s²` at an Earth's surface | `GM/R²` with R derived from 5.9722×10²⁴ kg at 5514 kg/m³ |
+| `11186 m/s` escape, `29788 m/s` to orbit | `√(2GM/R)`, `√(GM/R)` |
+| a 1 M☉ star lasts `10.4 Gyr` | 0.1% of mass fused, L = M^3.5 |
+| H₂ escapes a Moon, not the Earth | Jeans λ > 36 holds, 20–36 leaks |
+| your water boils at 99.4 °C | the bound atmosphere's own pressure, `P = GMm/R²` |
+| a rock falls into a 1 M☉ sun in ~2 months | free-fall time `√(3π/32Gρ)` — so make a *cloud* and wait |
+| `1.000` Kepler ratio at 1 AU | `resolvePair` integrates the real inverse-square field |
+| `drift 0.0e+0 J` in the ledger | the ledger sums four buckets and compares each step |
 
-To reach a real headset, HTTPS is mandatory (WebXR requires a secure context).
-`npx http-server -S -C cert.pem -K key.pem` is enough on a LAN. The XR path is wired
-in `main.js`: thumbstick locomotion, trigger casts the lance, grip lights an orb, and
-the same `World` instance is stepped either way — a headset is a different camera, not a
-different universe.
+Ground, where it exists, is not a plane: it is an analytic height field (Perlin fBm + ridged
+craters, computed identically in JS and in the shader from `terrainGLSL()`), and a body rests on
+it because `collideHalfSpace` projects its velocity onto the analytic surface normal.
 
-## The bargain this world strikes
+A number is only as honest as its radius floor. Bodies smaller than **0.22 m** render at 0.22 m,
+because below that a sphere is a handful of pixels at any camera distance; the HUD prints the real
+radius and says so on the page.
 
-Fantasy is allowed to exist; it is not allowed to be free.
+## Layout
 
-| Impossible thing | The bill it pays |
-|---|---|
-| Floating islands | a levitation store leaks watts; run it out and the island falls at 9.80665 m/s² |
-| Levitation spell | `F = mg`, billed per frame against your store; run dry mid-hold and the fraction you *could* afford is the lift you *get* |
-| Kinetic lance | ½mv² leaves the store, and the caster is thrown backwards by exactly mv — recoil is applied, not described |
-| Freeze ray | it is a heat pump: cost is bounded by Carnot, deep cold is brutal, and the extracted heat is dumped behind you |
-| Light orb | radiates σT⁴·A·ε, so a 15 cm incandescent sphere costs ~22 kW and drains a full charge in minutes. Starve it and it **dims**, because nobody gets something for nothing |
-| Two moons | real masses, so they tug you at ~10⁻⁴ m/s² and drive the tide the shoreline actually follows |
-| Feather and anvil | identical acceleration; only drag ever disagrees, so the feather floats and the anvil does not |
+```
+index.html                the void          ┐
+src/universe.js           its viewer        ├─ all four import the same kernel
+src/genesis.js            the creator        │
+archipelago.html          a created world   │
+src/archipelago.js        its viewer        ┘
+src/physics.js            the laws (no imports)
+src/fantasy.js            that world's two invented laws
+srv/serve.mjs             static + POST /universe.json + GET /events
+tests/                    77 assertions
+tools/                    boot-check (headless, per page), check-imports, build-onefile, package-standalone
+```
 
-Everything the HUD shows is read out of the kernel: felt gravity, kinetic and potential
-energy, contacts per second, terminal velocity of the rain, and the ledger's audit line.
-That last one is the interesting number — it is the energy the world has created, and if
-you ever see it leave zero, the build is broken.
+The three-way rule that keeps this honest: the HUD, the shaders, and `collideHalfSpace` read
+`terrainHeight`/`SEA_LEVEL` from the kernel. There is no second copy to drift.
 
-## What is enforced, not asserted
+## The things I will not pretend
 
-`npm test` is the part that makes this claim checkable rather than rhetorical:
-
-- equivalence principle, ballistic arcs vs the analytic solution
-- momentum conserved to 1e-12 through collisions; energy may only go **down**, and the
-  deficit must reappear as heat in the bodies (it is booked, not deleted)
-- elastic systems conserve KE exactly, inelastic ones conserve KE + heat exactly
-- determinism: a jittery frame schedule and a smooth one produce the same world, because
-  the step is fixed at 240 Hz
-- Snell, TIR past 48.6°, Fresnel, inverse-square, Wien, Stefan–Boltzmann, Doppler
-- Archimedes: the log floats, the anchor sinks, neutral buoyancy hovers
-- `Ledger.spend()` throws `NO_FREE_ENERGY` — an overdraft spell is unrepresentable
-- a 60 s soak that casts everything, drains the caster to zero, and audits every joule
-
-`npm run verify` adds two more: `check-imports` walks the module graph exactly as the
-browser's import map will, and `boot-check` **runs the real `main.js`** head-less against
-real three.js with only `WebGLRenderer` and the DOM stubbed (the DOM's id list is parsed
-out of `index.html`, so a `$('v-typo')` throws there as it does in Chrome). Both caught
-live bugs during development: a top-level TDZ crash that would have shipped a blank page,
-a `World.step()` that replaced body objects and thereby stranded every mesh, and a light
-spell that emitted unbilled lumens when the store ran dry.
-
-## Honest limits
-
-- **No GPU, no headset, no display in this sandbox.** The world is served to a browser;
-  it was verified by tests and a headless boot, not by a human looking at it here.
-- The integrator is semi-implicit Euler at a fixed step: symplectic and bounded, not
-  exact. Tolerances in the tests say so instead of hiding it.
-- Collisions are impulse-based against analytic surfaces. It will not survive a
-  10 000-object crowd, and there is no friction model, no rotation dynamics, no sound.
-- `terrainHeight()` is shared by the mesh builder and the collision solver on purpose:
-  geometry and physics cannot disagree. Water *visuals* come from the GPU normal map
-  while water *physics* comes from `waterSurface()` — a documented split, ripples are
-  decoration, the tide level is not.
+* **Pixels and headsets are unverified.** No GPU here. What *is* verified, by `npm run boot void`:
+  over 300 frames of the real `index.html` run without throwing (the harness asserts `framesRun > 300`), no NaN anywhere, 21 HUD ids all
+  present, the ledger still balances, an empty universe has no time, and a created star starts the
+  clock.
+* **The n-body is O(n²) with no BH tree**, so a `make 400` is fine and a `make 100000` is not
+  attempted. Collisions use an impulse solver with Baumgarte stabilisation — good for resting
+  contact, not a continuum-mechanics solver. A moon you throw at 5 km/s deforms, and the kernel
+  tells you via the Roche limit rather than simulating the debris: **fluid Roche is `2.44·R_p·
+  (ρ_p/ρ_s)^⅓`**.
+* **You can do anything, but you cannot undo consequence.** `spec ground -4000` prints the real
+  free-fall time into that density and declines.

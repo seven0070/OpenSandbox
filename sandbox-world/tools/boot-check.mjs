@@ -17,6 +17,16 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { register } from 'node:module';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const APPS = {
+  void: { js: 'src/universe.js', html: 'index.html' },
+  archipelago: { js: 'src/archipelago.js', html: 'archipelago.html' },
+};
+const WHICH = process.argv[2] || 'void';
+const APP = APPS[WHICH];
+if (!APP) {
+  console.error(`unknown app '${WHICH}'. one of: ${Object.keys(APPS).join(', ')}`);
+  process.exit(2);
+}
 globalThis.__bootRoot = ROOT;
 register(pathToFileURL(resolve(ROOT, 'tools/boot-loader.mjs')).href, import.meta.url, {
   data: { root: ROOT },
@@ -32,7 +42,7 @@ Object.defineProperty(globalThis, 'performance', {
 });
 
 // --- DOM, ids lifted from the real index.html --------------------------------
-const html = await readFile(resolve(ROOT, 'index.html'), 'utf8');
+const html = await readFile(resolve(ROOT, APP.html), 'utf8');
 const ids = new Set([...html.matchAll(/id="([\w-]+)"/g)].map((m) => m[1]));
 
 const handlers = new Map(); // type -> [fn]
@@ -50,7 +60,15 @@ function mkEl(id) {
     id,
     textContent: '',
     innerHTML: '',
+    value: '',
     style: {},
+    children: [],
+    prepend(el) { this.children.unshift(el); },
+    appendChild(el) { this.children.push(el); },
+    get lastChild() {
+      const c = this.children.pop();
+      return c ?? { remove() {} };
+    },
     dataset: {},
     classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
     addEventListener: addFor,
@@ -64,6 +82,8 @@ function mkEl(id) {
 const elById = new Map();
 const seenIds = new Set();
 globalThis.document = {
+  activeElement: null,
+  querySelectorAll: () => [],
   getElementById(id) {
     seenIds.add(id);
     if (!ids.has(id)) return null; // and main.js will throw on it, as in a browser
@@ -101,7 +121,7 @@ const terrainAt = (x, z) => phys.terrainHeight(x, z);
 
 let app;
 try {
-  app = await import(pathToFileURL(resolve(ROOT, 'src/main.js')).href);
+  app = await import(pathToFileURL(resolve(ROOT, APP.js)).href);
 } catch (e) {
   console.error(`✗ main.js failed to load:\n\n${e.stack}\n`);
   process.exit(1);
@@ -112,7 +132,8 @@ if (!T) {
   process.exit(1);
 }
 
-const { world, renderer, caster } = T;
+const { world, renderer } = T;
+const caster = T.caster;
 const run = (n) => {
   for (let i = 0; i < n; i++) {
     fakeNow += TICK_MS;
@@ -121,7 +142,9 @@ const run = (n) => {
 };
 
 const before = T.frames();
+let voidAfterCreate = false, voidCreated = 0, voidFuel = 0, voidMass = 0, voidAllFinite = true, voidMoved = false;
 run(90);
+const voidTimeBefore = WHICH === 'void' ? T.world.time : 1;
 
 // capture the mouse the way a player would, then walk and look
 step('pointer lock', () => renderer.domElement.requestPointerLock());
@@ -135,8 +158,24 @@ const keys = ['KeyW', 'KeyA', 'KeyD', 'KeyS', 'Space'];
 keys.forEach((code) => step(`hold ${code}`, () => { fire('keydown', { code }); run(12); fire('keyup', { code }); }));
 
 // every demo key in the HUD legend, then keep simulating while they play out
-for (const code of ['KeyP', 'KeyT', 'KeyF', 'KeyG', 'KeyH', 'KeyH']) {
+for (const code of WHICH === 'void' ? ['KeyB', 'KeyB', 'KeyT', 'KeyN'] : ['KeyP', 'KeyT', 'KeyF', 'KeyG', 'KeyH', 'KeyH']) {
   step(`press ${code}`, () => { fire('keydown', { code }); run(24); });
+}
+if (WHICH === 'void') {
+  // the headline claim, asserted end to end through the real app
+  step('console: create star', () => { T.runCommand('create star name sol'); run(60); });
+  step('console: make 12 stone', () => { T.runCommand('make 12 stone'); run(30); });
+  step('console: bad wish', () => { T.runCommand('create stone mass -5'); });
+  step('console: unknown verb', () => { T.runCommand('befriend the moon'); });
+  voidAfterCreate = T.world.time > 0;
+  voidCreated = T.gen.bodies.size;
+  // Evidence must be taken while bodies exist: `void` (reset) legitimately
+  // leaves an empty universe, and "some body is finite" is vacuously false
+  // when there are none — which is how this check first failed for the wrong reason.
+  voidAllFinite = world.bodies.every((b) => [b.position.x, b.position.y, b.position.z, b.velocity.x, b.velocity.y, b.velocity.z].every(Number.isFinite));
+  voidMoved = world.bodies.some((b) => Math.abs(b.position.x) > 1e-9 || Math.abs(b.velocity.y) > 1e-9 || b.mass > 0);
+  voidFuel = T.you.fuel;
+  voidMass = T.gen.massCreated;
 }
 run(180); // let the scattered stones hit the ground and come to rest
 const midContacts = world.contacts;
@@ -157,39 +196,64 @@ const sunkCount = world.bodies.filter((b) => {
 const finite = world.bodies.every((b) =>
   [b.position.x, b.position.y, b.position.z, b.velocity.x, b.velocity.y, b.velocity.z].every(Number.isFinite),
 );
-const playerSane = Number.isFinite(T.player.position.y) && T.player.position.y > -70;
-const audit = caster.ledger.audit(T.initialCredit);
-const islandAlive = T.islands.every((i) => i.store.remainingFraction >= 0);
+const me = T.player ?? T.you; // the archipelago calls its body `player`, the void calls it `you`
+const allFinite = [me.position.x, me.position.y, me.position.z, me.velocity.x, me.velocity.y, me.velocity.z].every(Number.isFinite);
+const playerSane = WHICH === 'void' ? allFinite : Number.isFinite(me.position.y) && me.position.y > -70;
+const audit = caster ? caster.ledger.audit(T.initialCredit) : { ok: true, drift: 0 };
+const islands = T.islands;
+const islandAlive = islands ? islands.every((i) => i.store.remainingFraction >= 0) : true;
+const islandFloor = islands ? Math.min(...islands.map((i) => i.store.remainingFraction)) : null;
 
 const report = {
+  app: WHICH,
   framesRun: T.frames() - before,
+  voidTimeFrozenBeforeCreation: WHICH === 'void' ? voidTimeBefore === 0 : null,
+  voidTimeFlowingAfterCreation: voidAfterCreate,
+  voidCreated: voidCreated || null,
+  voidFuelUsed: WHICH === 'void' ? Number((90 - voidFuel).toFixed(3)) : null,
+  voidMassKg: voidMass ? Number(voidMass.toExponential(2)) : null,
   contactsMidRun: midContacts,
   stonesAtRest: resting.length,
   simSeconds: Number(world.time.toFixed(2)),
   physicsSteps: Math.round(world.time / world.dt),
   bodies: world.bodies.length,
   contacts: world.contacts,
-  playerAltitude: Number(T.player.position.y.toFixed(2)),
-  chargeLeftkJ: Number((caster.ledger.stored / 1000).toFixed(1)),
+  playerAltitude: Number(me.position.y.toFixed(2)),
+  chargeLeftkJ: caster ? Number((caster.ledger.stored / 1000).toFixed(1)) : null,
   ledgerDriftJ: Number(audit.drift.toExponential(2)),
   hudIdsRequested: seenIds.size,
   hudIdsMissing: [...seenIds].filter((id) => !ids.has(id)),
-  islandChargeFloor: Number(Math.min(...T.islands.map((i) => i.store.remainingFraction)).toFixed(4)),
+  islandChargeFloor: islandFloor === null ? null : Number(islandFloor.toFixed(4)),
 };
 console.log(JSON.stringify(report, null, 2));
 
 const checks = [
   ['an animation loop was registered', typeof renderer.__cb === 'function'],
   ['hundreds of frames ran', report.framesRun > 300],
-  ['no NaN in any body', finite && moved],
-  ['the player has a sane altitude', playerSane],
+  ['no NaN in any body, and they actually moved', WHICH === 'void' ? voidAllFinite && voidMoved : finite && moved],
+  ['the body you drive has a sane altitude', playerSane],
+  ...(WHICH === 'void' ? [['your coordinates never went non-finite near a star', allFinite]] : []),
   ['the ledger still balances after a full play session', audit.ok],
   ['no HUD element was requested with a missing id', report.hudIdsMissing.length === 0],
   ['every island store is non-negative', islandAlive],
+  ...(islands ? [['the archipelago aged but did not gain charge', islandFloor <= 1]] : []),
   ['no frame threw', failures.length === 0],
-  ['stones really collided with the world', midContacts > 0],
-  ['and they came to rest instead of jittering forever', resting.length > 0],
-  ['nothing sank through the terrain', sunkCount === 0],
+  ...(WHICH === 'void'
+    ? [
+        ['an empty universe has no time', voidTimeBefore === 0],
+        ['creating a star starts the clock', voidAfterCreate === true],
+        ['the console actually created bodies', voidCreated > 0],
+        ['burning fuel spent reaction mass', voidFuel > 0 && voidFuel < 40],
+        ['the census counts what was introduced', voidMass > 0],
+      ]
+    : []),
+  ...(WHICH === 'archipelago'
+    ? [
+        ['stones really collided with the world', midContacts > 0],
+        ['and they came to rest instead of jittering forever', resting.length > 0],
+        ['nothing sank through the terrain', sunkCount === 0],
+      ]
+    : []),
 ];
 console.log('');
 let bad = 0;

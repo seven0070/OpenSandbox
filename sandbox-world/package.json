@@ -6,10 +6,10 @@
   "description": "A fantasy world that obeys real physical law, served from an OpenSandbox-style sandbox.",
   "scripts": {
     "serve": "node srv/serve.mjs",
-    "test": "node --test tests/physics.test.mjs tests/gameplay.soak.test.mjs",
+    "test": "node --test tests/physics.test.mjs tests/gameplay.soak.test.mjs tests/void.test.mjs",
     "check": "node tools/check-imports.mjs",
-    "boot": "node tools/boot-check.mjs",
-    "verify": "npm run check && npm test && node tools/boot-check.mjs"
+    "boot": "node tools/boot-check.mjs void && node tools/boot-check.mjs archipelago",
+    "verify": "npm run check && npm test && npm run boot"
   },
   "dependencies": {
     "three": "^0.169.0"

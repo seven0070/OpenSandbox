@@ -3,166 +3,142 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>ARCANE PHYSICS — a fantasy world that pays its debts</title>
-    <meta name="description" content="A virtual world where floating islands, spells and two moons all obey gravity, thermodynamics, optics and conservation of momentum." />
+    <title>the void — a universe that contains only what you create</title>
+    <meta name="description" content="An empty universe with real physics. Nothing exists until you create it; time does not pass until something changes." />
     <style>
       :root {
-        --ink: #e8e2d0;
-        --amber: #f0b45a;
-        --cyan: #7fe3d4;
-        --rose: #ff8f7a;
-        --bg: #05070c;
+        --ink: #dfe4ea; --dim: #7c8698; --amber: #f0b45a; --cyan: #7fe3d4; --rose: #ff8f7a;
       }
       * { box-sizing: border-box; }
-      html, body {
-        margin: 0; height: 100%; background: var(--bg); color: var(--ink);
-        font: 13px/1.45 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-        overflow: hidden; -webkit-font-smoothing: antialiased;
-      }
+      html, body { margin: 0; height: 100%; background: #000; color: var(--ink); overflow: hidden;
+        font: 12.5px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace; -webkit-font-smoothing: antialiased; }
       canvas { display: block; }
-      #hud {
-        position: fixed; inset: 0; pointer-events: none; z-index: 10;
-        display: grid; grid-template-rows: auto 1fr auto;
-        padding: 14px; gap: 10px;
-      }
-      .row { display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
-      .card {
-        background: rgba(6, 9, 16, 0.62); border: 1px solid rgba(240, 180, 90, 0.22);
-        border-radius: 10px; padding: 10px 12px; backdrop-filter: blur(9px) saturate(1.2);
-        box-shadow: 0 8px 34px rgba(0, 0, 0, 0.55); max-width: 44ch;
-      }
-      .card h1 { font-size: 12px; margin: 0 0 6px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--amber); font-weight: 600; }
-      .card h1 small { color: #8b8571; letter-spacing: 0.04em; text-transform: none; font-weight: 400; margin-left: 6px; }
-      .kv { display: grid; grid-template-columns: auto 1fr; gap: 1px 12px; font-variant-numeric: tabular-nums; }
-      .kv dt { color: #8b8571; }
-      .kv dd { margin: 0; text-align: right; }
-      .bar { height: 5px; border-radius: 3px; background: rgba(255,255,255,0.1); overflow: hidden; margin-top: 7px; }
-      .bar > i { display: block; height: 100%; background: linear-gradient(90deg, var(--cyan), var(--amber)); transition: width 0.12s linear; }
-      .bar.heat > i { background: linear-gradient(90deg, #5f7bff, var(--rose)); }
-      #law { color: var(--cyan); }
-      #law.bad { color: #ff5d5d; }
-      #crosshair { position: fixed; left: 50%; top: 50%; width: 18px; height: 18px; margin: -9px; z-index: 11; pointer-events: none; opacity: 0.8; }
-      #crosshair:before, #crosshair:after { content: ""; position: absolute; background: var(--ink); }
-      #crosshair:before { left: 8px; top: 0; width: 1px; height: 18px; }
-      #crosshair:after { top: 8px; left: 0; height: 1px; width: 18px; }
-      #toast {
-        position: fixed; left: 50%; bottom: 92px; transform: translateX(-50%);
-        background: rgba(6,9,16,0.86); border: 1px solid rgba(127,227,212,0.35); color: var(--cyan);
-        padding: 8px 14px; border-radius: 999px; opacity: 0; transition: opacity 0.25s; z-index: 12;
-        pointer-events: none; white-space: nowrap; font-size: 12px;
-      }
-      #toast.show { opacity: 1; }
-      #keys { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 10; display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; pointer-events: none; }
-      kbd {
-        background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.14); border-bottom-width: 2px;
-        border-radius: 5px; padding: 2px 7px; font: inherit; font-size: 11px; color: #cfc9b6;
-      }
-      kbd b { color: var(--amber); font-weight: 600; }
-      #gate {
-        position: fixed; inset: 0; z-index: 30; display: grid; place-items: center;
-        background: radial-gradient(1200px 700px at 50% 40%, #101a2e 0%, #05070c 70%);
-        transition: opacity 0.5s; text-align: center; padding: 24px;
-      }
+      .card { background: rgba(8,10,14,0.72); border: 1px solid rgba(255,255,255,0.09); border-radius: 10px;
+        padding: 9px 11px; backdrop-filter: blur(10px); max-width: 46ch; }
+      .card h1 { font-size: 10.5px; margin: 0 0 5px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--amber); font-weight: 600; }
+      .card h1 small { color: var(--dim); letter-spacing: 0.02em; text-transform: none; font-weight: 400; margin-left: 6px; }
+      .kv { display: grid; grid-template-columns: auto 1fr; gap: 0 12px; font-variant-numeric: tabular-nums; margin: 0; }
+      .kv dt { color: var(--dim); } .kv dd { margin: 0; text-align: right; }
+      #hud { position: fixed; inset: 0; z-index: 10; pointer-events: none; padding: 12px;
+        display: grid; grid-template-rows: auto 1fr auto; gap: 8px; }
+      .row { display: flex; gap: 8px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
+      #palette { display: flex; gap: 5px; flex-wrap: wrap; pointer-events: auto; }
+      #palette button { font: inherit; font-size: 11px; color: var(--ink); background: rgba(255,255,255,0.05);
+        border: 1px solid rgba(255,255,255,0.13); border-radius: 6px; padding: 4px 9px; cursor: pointer; }
+      #palette button:hover { background: rgba(255,255,255,0.11); }
+      #palette button.on { border-color: var(--amber); color: #06080e; background: var(--amber); font-weight: 700; }
+      #console { position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 12; display: grid;
+        grid-template-columns: 1fr auto; gap: 6px; align-items: end; }
+      #out { grid-column: 1 / -1; max-height: 26vh; overflow: hidden; display: flex; flex-direction: column-reverse;
+        font-size: 11.5px; color: #b9c2cf; pointer-events: none; mask-image: linear-gradient(#000 65%, transparent); }
+      #out div { white-space: pre-wrap; }
+      #cmd { grid-column: 1; pointer-events: auto; width: 100%; font: inherit; color: var(--cyan); caret-color: var(--cyan);
+        background: rgba(6,8,12,0.86); border: 1px solid rgba(127,227,212,0.28); border-radius: 8px; padding: 9px 12px; outline: none; }
+      #cmd:focus { border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(127,227,212,0.09); }
+      #go { pointer-events: auto; font: inherit; font-weight: 700; cursor: pointer; color: #06080e; background: var(--cyan);
+        border: 0; border-radius: 8px; padding: 9px 16px; }
+      #keys { position: fixed; right: 12px; bottom: 84px; z-index: 11; text-align: right; color: var(--dim); font-size: 11px; pointer-events: none; }
+      #keys b { color: var(--ink); font-weight: 600; }
+      #warn { color: var(--dim); font-size: 10.5px; margin-top: 5px; }
+      #gate { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; text-align: center; padding: 24px;
+        background: #000; transition: opacity 0.9s; }
       #gate.hidden { opacity: 0; pointer-events: none; }
-      #gate .inner { max-width: 56ch; }
-      #gate .title { font-size: clamp(26px, 6vw, 46px); letter-spacing: 0.22em; color: var(--amber); margin: 0 0 6px; font-weight: 300; text-transform: uppercase; }
-      #gate .sub { color: #a49d86; margin: 0 0 22px; font-size: 13px; }
-      #gate .laws { text-align: left; margin: 0 auto 22px; max-width: 46ch; color: #b9b2a0; }
-      #gate .laws li { margin: 3px 0; }
-      #gate .laws b { color: var(--cyan); font-weight: 600; }
-      button.go {
-        pointer-events: auto; cursor: pointer; font: inherit; font-size: 14px; letter-spacing: 0.1em;
-        text-transform: uppercase; color: #06080e; background: var(--amber); border: 0;
-        padding: 12px 26px; border-radius: 999px; font-weight: 700;
-        box-shadow: 0 0 40px rgba(240,180,90,0.35);
-      }
-      button.go:hover { filter: brightness(1.08); }
-      button.ghost { background: transparent; color: var(--ink); border: 1px solid rgba(255,255,255,0.22); box-shadow: none; }
-      #err { position: fixed; left: 12px; bottom: 12px; z-index: 40; color: #ff9a9a; max-width: 70ch; font-size: 11px; white-space: pre-wrap; }
+      #gate .inner { max-width: 58ch; }
+      #gate .title { font-size: clamp(22px,5vw,34px); letter-spacing: 0.3em; text-transform: uppercase; color: #cfd6e0; margin: 0 0 10px; font-weight: 200; }
+      #gate .sub { color: var(--dim); margin: 0 0 20px; }
+      #gate ol { text-align: left; color: #aab3c2; margin: 0 auto 22px; padding-left: 20px; max-width: 52ch; }
+      #gate li { margin: 5px 0; } #gate b { color: var(--cyan); font-weight: 600; }
+      button.go { pointer-events: auto; cursor: pointer; font: inherit; font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase;
+        color: #06080e; background: var(--amber); border: 0; padding: 11px 24px; border-radius: 999px; font-weight: 700; }
+      button.ghost { background: transparent; color: var(--ink); border: 1px solid rgba(255,255,255,0.2); font-weight: 400; }
+      #err { position: fixed; left: 12px; top: 46vh; z-index: 40; color: var(--rose); font-size: 11px; max-width: 60ch; white-space: pre-wrap; }
     </style>
     <script type="importmap">
-      {
-        "imports": {
-          "three": "./vendor/three.module.js",
-          "three/addons/": "./vendor/addons/"
-        }
-      }
+      { "imports": { "three": "./vendor/three.module.js", "three/addons/": "./vendor/addons/" } }
     </script>
   </head>
   <body>
     <div id="hud">
       <div class="row">
-        <section class="card" id="panel-body">
-          <h1>Body <small>live state</small></h1>
+        <section class="card">
+          <h1>Census <small>what exists, and what it cost</small></h1>
           <dl class="kv">
-            <dt>speed</dt><dd id="v-speed">—</dd>
-            <dt>altitude</dt><dd id="v-alt">—</dd>
-            <dt>gravity felt</dt><dd id="v-g">—</dd>
-            <dt>kinetic</dt><dd id="v-ke">—</dd>
-            <dt>potential</dt><dd id="v-pe">—</dd>
+            <dt>things created</dt><dd id="v-n">—</dd>
+            <dt>mass introduced</dt><dd id="v-mass">—</dd>
+            <dt>rest energy</dt><dd id="v-energy">—</dd>
+            <dt>dissipated as heat</dt><dd id="v-heat">—</dd>
+            <dt>radiated away</dt><dd id="v-light">—</dd>
+            <dt>entropy</dt><dd id="v-entropy">—</dd>
           </dl>
+          <div id="warn">Radii below the view floor are drawn at 0.22 units so you can see them; the physics uses the true numbers.</div>
         </section>
-        <section class="card" id="panel-ledger">
-          <h1>Ledger <small>energy must come from somewhere</small></h1>
+        <section class="card">
+          <h1>Time <small>relational, not wall-clock</small></h1>
           <dl class="kv">
-            <dt>stored</dt><dd id="v-store">—</dd>
-            <dt>as heat</dt><dd id="v-heat">—</dd>
-            <dt>as light</dt><dd id="v-rad">—</dd>
-            <dt>audit drift</dt><dd id="law">—</dd>
+            <dt>elapsed</dt><dd id="v-time">—</dd>
+            <dt>clock</dt><dd id="v-clock">—</dd>
+            <dt>your velocity</dt><dd id="v-you">—</dd>
+            <dt>gravity on you</dt><dd id="v-g">—</dd>
+            <dt>acceleration</dt><dd><input id="accel" type="range" min="1" max="4000" step="1" value="1" style="width:110px;vertical-align:middle" /> <span id="v-accel">1×</span></dd>
           </dl>
-          <div class="bar"><i id="bar-charge" style="width:100%"></i></div>
-          <div class="bar heat"><i id="bar-heat" style="width:0%"></i></div>
+          <dl class="kv" style="margin-top:4px"><dt>history</dt><dd id="v-timeline" style="text-align:right;max-width:26ch">—</dd></dl>
         </section>
       </div>
       <div></div>
       <div class="row" style="align-items:flex-end">
-        <section class="card">
-          <h1>World <small>conserved, not decorated</small></h1>
-          <dl class="kv">
-            <dt>bodies</dt><dd id="v-n">—</dd>
-            <dt>contacts/s</dt><dd id="v-cps">—</dd>
-            <dt>universe total E</dt><dd id="v-total">—</dd>
-            <dt>island charge left</dt><dd id="v-island">—</dd>
-            <dt>fps / physics steps</dt><dd id="v-fps">—</dd>
-          </dl>
-        </section>
-        <section class="card" style="text-align:right">
-          <h1>Terminal velocity <small>rain, 2 mm drops</small></h1>
-          <dl class="kv">
-            <dt>falling speed</dt><dd id="v-rain">—</dd>
-            <dt>ceiling</dt><dd id="v-vterm">—</dd>
-          </dl>
-        </section>
+        <div id="palette">
+          <button data-create="grain">grain</button><button data-create="stone" class="on">stone</button>
+          <button data-create="boulder">boulder</button><button data-create="ice">ice</button>
+          <button data-create="ocean">ocean</button><button data-create="moonlet">moonlet</button>
+          <button data-create="moon">moon</button><button data-create="earthlike">earth</button>
+          <button data-create="superearth">super-earth</button><button data-create="star">star</button>
+          <button data-create="giantStar">giant</button><button data-create="blueGiant">blue giant</button>
+          <button data-create="whiteDwarf">white dwarf</button><button data-create="neutronStar">neutron star</button>
+          <button data-create="blackHole">black hole</button><button data-create="cloud">gas cloud</button>
+          <button data-create="fire">fire</button><button data-create="life">life</button>
+          <button data-create="archipelago">⌗ archipelago</button>
+        </div>
+        <div style="display:flex;gap:6px;pointer-events:auto">
+          <button id="thrust" style="font:inherit;font-size:11px;background:rgba(255,255,255,.05);color:var(--ink);border:1px solid rgba(255,255,255,.13);border-radius:6px;padding:4px 10px;cursor:pointer">burn 0.5 kg fuel</button>
+          <button id="reset" style="font:inherit;font-size:11px;background:rgba(255,255,255,.05);color:var(--ink);border:1px solid rgba(255,255,255,.13);border-radius:6px;padding:4px 10px;cursor:pointer">return to void</button>
+        </div>
       </div>
     </div>
-    <div id="crosshair"></div>
-    <div id="toast"></div>
+
     <div id="keys">
-      <kbd><b>WASD</b> walk</kbd><kbd><b>Space</b> jump</kbd><kbd><b>Click</b> lance (recoil!)</kbd>
-      <kbd><b>F</b> light orb</kbd><kbd><b>G</b> freeze water</kbd><kbd><b>H</b> lift rock</kbd>
-      <kbd><b>T</b> drop feather + anvil</kbd><kbd><b>P</b> scatter 30 stones</kbd><kbd><b>R</b> reset</kbd>
+      <b>WASD</b> thrust · <b>Space/Shift</b> up-down · <b>mouse</b> look · <b>`</b> console<br />
+      <b>B</b> create selected · <b>N</b> erase nearest · <b>T</b> burn fuel · <b>R</b> void
     </div>
+
+    <div id="console">
+      <div id="out"></div>
+      <input id="cmd" autocomplete="off" spellcheck="false"
+        placeholder="create star name sol  ·  create earthlike name terra at 1.496e11 0 0 orbit sol  ·  make 24 stone  ·  spec gravity 3.7  ·  help" />
+      <button id="go">create</button>
+    </div>
+
     <div id="gate">
       <div class="inner">
-        <p class="title">Arcane Physics</p>
-        <p class="sub">A fantasy world that keeps its laws. Enter a place where islands float, moons pull the sea,
-          and every spell sends you an invoice.</p>
-        <ul class="laws">
-          <li><b>Gravity</b> is Newtonian. The moons tug you with ~10<sup>-4</sup> m/s² and raise real tides.</li>
-          <li><b>Spells are transducers, not sources.</b> Run out of joules and the light dims, the lift fails, the shot misfires.</li>
-          <li><b>Momentum is owed.</b> A kinetic lance throws you backwards by exactly m·v.</li>
-          <li><b>Falling bodies are equal.</b> A feather and an anvil land together, because drag is the only thing that ever disagreed.</li>
-          <li><b>Nothing is deleted.</b> Lost impact energy reappears as heat, and the ledger audits it live. Break a law and the HUD goes red.</li>
-        </ul>
-        <p style="margin-bottom:18px">
-          <button class="go" id="enter">Enter on foot</button>
+        <p class="title">The Void</p>
+        <p class="sub">Nothing exists here. Not ground, not sky, not light, not down. Time is not passing, because
+          there is nothing to pass relative to.</p>
+        <ol>
+          <li><b>You may create anything.</b> A grain, an ocean, a star, a black hole, a world.</li>
+          <li><b>You may not govern anything.</b> Once created, it belongs to the laws: it falls, pulls, radiates, cools, and cannot be edited.</li>
+          <li><b>Time is change.</b> The clock starts when your first creation can fall, orbit, or shine — and stops if everything reaches equilibrium.</li>
+          <li><b>Movement is throwing.</b> In an empty universe you have no ground to push off, so you eject reaction mass. Your fuel is finite: 40 kg.</li>
+          <li><b>Everything is counted.</b> Mass introduced, joules billed, entropy accumulated. The second law is a live readout, not a caption.</li>
+        </ol>
+        <p style="margin-bottom:16px">
+          <button class="go" id="enter">Enter the void</button>
           <button class="go ghost" id="enter-vr">Enter in VR</button>
         </p>
-        <p style="color:#6f6a5b;font-size:11px;margin:0">Desktop: WASD + mouse look, Escape to release.
-          Headset: thumbstick to walk, trigger to cast. Physics verified by 36 headless assertions — see <code>npm test</code>.</p>
+        <p style="color:#5d6675;font-size:11px;margin:0">Type <code style="color:var(--cyan)">create star</code> and reality does the rest —
+          <code>npm test</code> proves it uses textbook numbers: a declared Earth comes out at 6371 km, 9.82 m/s²,
+          11.186 km/s escape, and a 1 AU orbit that closes to 0.5% over a full period.</p>
       </div>
     </div>
     <div id="err"></div>
-    <script type="module" src="./src/main.js"></script>
+    <script type="module" src="./src/universe.js"></script>
   </body>
 </html>

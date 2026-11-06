@@ -30,6 +30,12 @@ export const SI = Object.freeze({
   air: 1.225, // density of air at sea level       kg m^-3
   meltIce: 333500, // latent heat of fusion of ice      J kg^-1
   heatWater: 4184, // specific heat of liquid water     J kg^-1 K^-1
+  k: 1.380649e-23, // Boltzmann constant               J K^-1
+  NA: 6.02214076e23, // Avogadro constant              mol^-1
+  Rsun: 6.957e8, // solar radius                        m
+  Msun: 1.98892e30, // solar mass                        kg
+  Lsun: 3.828e26, // solar luminosity                   W
+  AU: 1.495978707e11, // astronomical unit              m
 });
 
 // ---------------------------------------------------------------------------
@@ -126,6 +132,7 @@ export class Field {
     for (const b of this.bodies) a = a.add(gravitationalAcceleration(position, b.position, b.mass));
     return a;
   }
+
   /** Tidal acceleration across a baseline `offset` (differential gravity). */
   tidalAt(position, offset) {
     const near = this.accelerationAt(position);
@@ -303,16 +310,60 @@ export function collideHalfSpace(body, surface) {
 // hole the pixels drew. One source of truth, so they cannot disagree.
 // ---------------------------------------------------------------------------
 
-export const ISLANDS = Object.freeze([
-  { x: 0, z: 0, r: 34, h: 6.0, tilt: 0.0 },
-  { x: 92, z: -36, r: 22, h: 15.5, tilt: -0.04 },
-  { x: -78, z: 70, r: 18, h: 9.5, tilt: 0.05 },
-]);
+/**
+ * SPEC is the *shape of the universe*: what exists at all. It is declared, never
+ * assumed. The void is a legal value — no floor, no sea, no downward direction,
+ * no ambient temperature worth the name. Everything else in this file reads from
+ * here, so "nothing exists" is a single coherent state rather than a pile of
+ * special cases scattered through the code.
+ */
+export const VOID = Object.freeze({
+  mode: 'void',
+  ground: null, // null: there is no surface to be on. Not a floor at y=-1e9.
+  islands: [], //   nothing to stand on, nothing to collide with
+  seaLevel: null, // null: there is no water, and therefore no buoyancy
+  gravity: 0, //     no mass yet, so no preferred direction: no "down"
+  spin: 0, //        nothing rotating, so no Coriolis, no equatorial bulge
+  ambientT: 2.725, //  the one thing a void is entitled to: CMB background
+  time: 'relational', // time accrues only while something is changing
+});
+
+export const SPEC = {
+  mode: 'archipelago',
+  ground: -4.0,
+  islands: [
+    { x: 0, z: 0, r: 34, h: 6.0, tilt: 0.0 },
+    { x: 92, z: -36, r: 22, h: 15.5, tilt: -0.04 },
+    { x: -78, z: 70, r: 18, h: 9.5, tilt: 0.05 },
+  ],
+  seaLevel: 0.6,
+  gravity: SI.g0,
+  spin: 7.2722e-5,
+  ambientT: 288.15,
+  time: 'relational',
+};
+
+/** Replace part of the universe's definition. Returns the new SPEC. */
+export function setSpec(patch = {}) {
+  Object.assign(SPEC, patch);
+  if (patch.mode === 'void') Object.assign(SPEC, { ...VOID, ...patch });
+  return SPEC;
+}
+
+export const isVoid = () => SPEC.mode === 'void';
+/** The void is a true null: not a very far floor, not a very low sea. */
+export const hasGround = () => SPEC.ground !== null;
+export const hasWater = () => SPEC.seaLevel !== null;
+
+/** Live alias of the island list. Same array object as SPEC.islands, by design:
+ *  one list, so the mesh builder and the collision solver cannot drift apart. */
+export const ISLANDS = SPEC.islands;
 
 /** Height of land at x,z (metres above datum). 0 or below means open water. */
 export function terrainHeight(x, z) {
-  let h = -4.0; // seabed floor under the archipelago
-  for (const i of ISLANDS) {
+  if (!hasGround()) return null; //  nothing exists here — not even a floor
+  let h = SPEC.ground;
+  for (const i of SPEC.islands) {
     const dx = x - i.x;
     const dz = z - i.z;
     const d = Math.hypot(dx, dz);
@@ -330,21 +381,35 @@ export function terrainHeight(x, z) {
 
 export const SEA_LEVEL = 0.6;
 
-/** Exact analytic surface query used by collision (no mesh raycast needed). */
+/**
+ * Exact analytic surface query used by collision. In the void there is no
+ * surface, so the signed distance is a genuine Infinity: callers cannot
+ * "miss" a floor that was never created, and no mesh can be built on it.
+ */
+/**
+ * Injected by genesis when the universe has no floor: "ground" then means
+ * whatever surface exists, i.e. the things that were created. A created planet
+ * is terrain because gravity and contact say so, not because a heightfield was
+ * authored. Null in a void with nothing in it, which is the honest answer.
+ */
+export function setSurfaceQuery(fn) {
+  SPEC.surfaceQuery = fn || null;
+}
+
 export function landSurface(p) {
+  if (SPEC.surfaceQuery) return SPEC.surfaceQuery(p);
+  if (!hasGround()) return { signedDistance: Infinity, normal: new V(0, 1, 0), ground: null };
   const h = terrainHeight(p.x, p.z);
   const e = 0.5;
   const hx = (terrainHeight(p.x + e, p.z) - terrainHeight(p.x - e, p.z)) / (2 * e);
   const hz = (terrainHeight(p.x, p.z + e) - terrainHeight(p.x, p.z - e)) / (2 * e);
   const n = new V(-hx, 1, -hz).norm();
-  // signed distance to the surface, measured along y then projected on n
   const sd = (p.y - h) * n.y;
   return { signedDistance: sd, normal: n, ground: h };
 }
 
 export function waterSurface(p, t, moons = []) {
-  // Wind chop plus a real tidal term: the moons' differential gravity, scaled
-  // to something visible, is what raises the swell. No "fake tide" sine.
+  if (!hasWater()) return { height: null, normal: null };
   let swell = 0;
   for (const m of moons) {
     const dir = Math.cos((p.x - m.position.x) * 0.004 + (p.z - m.position.z) * 0.004 + t * 0.05);
@@ -352,8 +417,11 @@ export function waterSurface(p, t, moons = []) {
     swell += 0.55 * strength * dir;
   }
   const chop = 0.11 * Math.sin(p.x * 0.35 + t * 1.3) + 0.08 * Math.cos(p.z * 0.42 - t * 1.1);
-  const h = SEA_LEVEL + swell + chop;
-  return { height: h, normal: new V(-0.02 * Math.cos(p.x * 0.35 + t * 1.3), 1, 0.02 * Math.sin(p.z * 0.42 - t * 1.1)).norm() };
+  const h = SPEC.seaLevel + swell + chop;
+  return {
+    height: h,
+    normal: new V(-0.02 * Math.cos(p.x * 0.35 + t * 1.3), 1, 0.02 * Math.sin(p.z * 0.42 - t * 1.1)).norm(),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -422,6 +490,44 @@ export function irradiance(power, distance) {
   return power / (4 * Math.PI * Math.max(distance * distance, 1e-9));
 }
 
+/**
+ * Blackbody temperature -> sRGB, via Planck locus and Helland's piecewise fit.
+ * The renderer asks this instead of being told "stars are yellow", so a cooling
+ * object drifts red on screen for the same reason its Wien peak moves.
+ */
+export function blackbodyColor(T) {
+  const t = Math.max(0, Math.min(40000, Number(T) || 0));
+  if (t <= 0) return 0x000000;
+  const temp = t / 100;
+  let r, g, b;
+  if (temp <= 66) {
+    r = 255;
+    g = 99.4708025861 * Math.log(temp) - 161.1195681661;
+    b = temp <= 19 ? 0 : 138.5177312231 * Math.log(temp - 10) - 305.0447927307;
+  } else {
+    r = 329.698727446 * (temp - 60) ** -0.1332047592;
+    g = 288.1221695283 * (temp - 60) ** -0.0755148492;
+    b = 255;
+  }
+  const cl = (x) => Math.max(0, Math.min(255, x)) / 255;
+  const gam = (x) => (x > 0.0031308 ? 1.055 * x ** (1 / 2.4) - 0.055 : 12.92 * x);
+  return ((gam(cl(r)) * 255) << 16) | ((gam(cl(g)) * 255) << 8) | (gam(cl(b)) * 255);
+}
+
+/**
+ * Net radiative power of a sphere against its environment. Absolute rather
+ * than gross matters here: a body cooler than the void absorbs, warms up, and
+ * is therefore *changing* — and a body exactly at background temperature is in
+ * equilibrium, radiating and absorbing the same amount. That last case is what
+ * makes the void genuinely timeless, so the engine must compute it honestly.
+ */
+export function netLuminosity(radius, T, Tenv = SPEC.ambientT, emissivity = 1) {
+  const area = 4 * Math.PI * radius * radius;
+  const t = Math.max(0, Number(T) || 0);
+  const e = Math.max(0, Number(Tenv) || 0);
+  return area * Math.max(0, emissivity ?? 1) * SI.sigma * (t ** 4 - e ** 4);
+}
+
 /** Wien peak wavelength (m) and Stefan-Boltzmann exitance (W/m^2). */
 export const wienPeak = (T) => SI.b / T;
 export const exitance = (T, emissivity = 1) => emissivity * SI.sigma * T ** 4;
@@ -465,6 +571,11 @@ export class Ledger {
     this.thermal = 0;
     this.radiated = 0;
     this.entries = [];
+    // Entropy is NOT a fifth energy bucket — different units, so it must never
+    // be added to total(). It is the one number in this universe allowed to
+    // rise for free, and it is the only direction time is known to have.
+    this.entropy = 0;
+    this.entropyDecreases = 0;
   }
   credit(source, joules, note = '') {
     if (!(joules > 0)) throw new Error(`${this.label}: refusing non-positive credit of ${joules} from ${source}`);
@@ -485,8 +596,24 @@ export class Ledger {
   trackMechanical(j) {
     this.mechanical += j;
   }
-  trackHeat(j) {
+  /**
+   * Dissipation books entropy at the temperature it happened at. A cold universe
+   * is punished far harder for the same joule: dS = Q/T, so waste heat in the void
+   * (2.7 K) costs ~100x the entropy it would cost at room temperature. That is not
+   * flavour text, it is the reason an exothermic act in deep space is a *visible*
+   * event and the same act in air is not.
+   */
+  trackHeat(j, T = SPEC.ambientT) {
     this.thermal += j;
+    const dS = j / Math.max(1e-3, T);
+    if (dS < 0) this.entropyDecreases++;
+    this.entropy += dS;
+  }
+  /** Radiation leaving a hot body at T into a cold universe: same rule. */
+  trackEntropy(j, T) {
+    const dS = j / Math.max(1e-3, T);
+    if (dS < 0) this.entropyDecreases++;
+    this.entropy += dS;
   }
   /** Energy that left the store as light. The caller has already spent it. */
   trackRadiation(j) {
@@ -521,15 +648,53 @@ export class Ledger {
 // ---------------------------------------------------------------------------
 
 export class World {
-  constructor({ gravity = SI.g0, dt = FIXED_DT } = {}) {
+  constructor({ gravity = SPEC.gravity, dt = FIXED_DT, nBody = false } = {}) {
+    this.nBody = nBody; // true in a universe: everything with mass is a source
     this.field = new Field(gravity);
     this.bodies = [];
+    this.emitters = []; // anything that radiates: a change, so it feeds the clock
     this.dt = dt;
     this.time = 0;
     this.accumulator = 0;
+    this.frozenFrames = 0;
+    this.events = []; // the universe's history; see timeline()
     this.ledger = new Ledger('arcane');
     this.contacts = 0;
-    this.waterY = SEA_LEVEL;
+    this.waterY = hasWater() ? SPEC.seaLevel : -1e9;
+  }
+  /**
+   * Relational time. Leibniz: time is the order of successive things, so a
+   * universe with no change has no duration to measure — not "a clock running
+   * in an empty room", but literally no elapsed time. `activity` is the total
+   * power available to produce change: work being done, forces waiting to do
+   * it, light leaving something. Zero means the state is a fixed point, and
+   * advancing it would be theatre.
+   */
+  activity() {
+    let a = 0;
+    for (const b of this.bodies) {
+      if (b.fixed) continue;
+      let accel = this.field.accelerationAt(b.position);
+      if (this.nBody) {
+        for (const o of this.bodies) {
+          if (o === b || o.fixed || o.mass <= 0) continue;
+          accel = accel.add(gravitationalAcceleration(b.position, o.position, o.mass));
+        }
+      }
+      const F = accel.scale(b.mass);
+      a += F.mag() * (1 + b.velocity.mag()); // F·v is power; F alone is potential for change
+      if (b.heat) a += b.heat;
+    }
+    // A radiating body is a change in flight, so it keeps the clock running.
+    // Net, not gross: equilibrium against the background is not a change.
+    for (const b of this.bodies) if (Number.isFinite(b.luminosity)) a += Math.abs(b.luminosity);
+    for (const e of this.emitters) a += e.watts || 0;
+    return a;
+  }
+  isEvolving() {
+    const a = this.activity();
+    if (!Number.isFinite(a)) return false; // a NaN universe cannot be said to change
+    return this.bodies.length > 0 && a > 1e-12;
   }
   add(body) {
     this.bodies.push(body);
@@ -541,6 +706,12 @@ export class World {
   }
   /** Advance by an arbitrary frame time using whole fixed substeps. */
   advance(elapsed) {
+    if (SPEC.time === 'relational' && !this.isEvolving()) {
+      // Nothing can happen, so nothing has happened. The clock does not run.
+      this.accumulator = 0;
+      this.frozenFrames++;
+      return 0;
+    }
     this.accumulator += elapsed;
     let steps = 0;
     while (this.accumulator >= this.dt && steps < 60) {
@@ -558,7 +729,14 @@ export class World {
     // caught exactly this: meshes stopped moving, positions stopped matching.)
     for (const b of bodies) {
       if (b.fixed) continue;
-      let force = this.field.accelerationAt(b.position).scale(b.mass);
+      let accel = this.field.accelerationAt(b.position);
+      if (this.nBody) {
+        for (const o of bodies) {
+          if (o === b || o.fixed || o.mass <= 0) continue;
+          accel = accel.add(gravitationalAcceleration(b.position, o.position, o.mass));
+        }
+      }
+      let force = accel.scale(b.mass);
       if (b.aerodynamic) force = force.add(dragForce(b.velocity, b.aerodynamic));
       if (b.position.y - b.radius < this.waterY) {
         force = force.add(buoyancy(b, this.waterY, b.fluidDensity ?? SI.water));
@@ -582,6 +760,7 @@ export class World {
     }
     for (const b of bodies) {
       if (b.fixed) continue;
+      if (!hasGround() && !SPEC.surfaceQuery) continue; // no floor exists to hit
       const onLand = landSurface(b.position);
       if (onLand.signedDistance >= 0) continue;
       const r = collideHalfSpace(b, landSurface);
@@ -593,6 +772,17 @@ export class World {
   }
   snapshot() {
     return this.bodies.map((b) => [b.position.x, b.position.y, b.position.z, b.velocity.x, b.velocity.y, b.velocity.z]);
+  }
+  /**
+   * The only history a void can have: a list of things that changed. `time` is
+   * derived from this, not the other way round.
+   */
+  note(what, detail = '') {
+    this.events.push({ t: this.time, what, detail });
+    return this.events.length;
+  }
+  timeline() {
+    return this.events;
   }
 }
 
@@ -609,4 +799,21 @@ export function totalEnergy(world) {
     heat += b.heat || 0;
   }
   return { ke, pe, heat, total: ke + pe + heat };
+}
+
+/**
+ * Universe-level bookkeeping for the HUD. `entropy` only ever grows: if a build
+ * ever reports it going down, something in the code is deleting energy instead of
+ * moving it, and tests/void.test.mjs fails on that alone.
+ */
+export function universeState(world) {
+  const E = totalEnergy(world);
+  return {
+    ...E,
+    bodies: world.bodies.length,
+    entropy: world.ledger.entropy,
+    evolving: world.isEvolving(),
+    time: world.time,
+    frozenFrames: world.frozenFrames,
+  };
 }

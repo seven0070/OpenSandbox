@@ -13,10 +13,13 @@ import { dirname, resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const html = await readFile(resolve(ROOT, 'index.html'), 'utf8');
-const map = JSON.parse(html.match(/<script type="importmap">([\s\S]*?)<\/script>/)[1]).imports;
+const ENTRIES = (process.argv[2] ? [process.argv[2]] : ['src/universe.js', 'src/archipelago.js']);
+const PAGES = ['index.html', 'archipelago.html'];
 
-const ENTRY = 'src/main.js';
+const pages = {};
+for (const h of PAGES) pages[h] = await readFile(resolve(ROOT, h), 'utf8').catch(() => '');
+const map = JSON.parse((pages['index.html'] || pages['archipelago.html']).match(/<script type="importmap">([\s\S]*?)<\/script>/)[1]).imports;
+
 const files = new Set();
 const problems = [];
 
@@ -41,8 +44,13 @@ async function walk(file) {
     return;
   }
   const specs = [
-    ...[...src.matchAll(/^\s*import\s+(?:[\s\S]*?)?\s*from\s*['"]([^'"]+)['"]/gm)].map((m) => m[1]),
-    ...[...src.matchAll(/^\s*export\s+(?:[\s\S]*?)?\s*from\s*['"]([^'"]+)['"]/gm)].map((m) => m[1]),
+    // [^;']* rather than [\s\S]*?: it must span newlines (multi-line named
+    // imports are the common style) but never cross a quote, which is how an
+    // earlier version matched the string literal 'from' inside genesis.js and
+    // how a too-greedy-then-too-tight fix nearly hid genesis.js from the graph.
+    ...[...src.matchAll(/^\s*import\s+[^;']*?from\s*['"]([^'"]+)['"]/gm)].map((m) => m[1]),
+    ...[...src.matchAll(/^\s*export\s+[^;']*?from\s*['"]([^'"]+)['"]/gm)].map((m) => m[1]),
+    ...[...src.matchAll(/^\s*import\s*['"]([^'"]+)['"]/gm)].map((m) => m[1]),
     ...[...src.matchAll(/import\(\s*['"]([^'"]+)['"]\s*\)/g)].map((m) => m[1]),
   ];
   for (const spec of specs) {
@@ -78,18 +86,20 @@ async function walk(file) {
   }
 }
 
-await walk(resolve(ROOT, ENTRY));
+for (const e of ENTRIES) await walk(resolve(ROOT, e));
 
 // assets the HTML itself asks for
-for (const ref of [...html.matchAll(/(?:src|href)="(\.\/[^"]+)"/g)].map((m) => m[1])) {
-  try {
-    await readFile(resolve(ROOT, ref));
-  } catch {
-    problems.push(`BROKEN   index.html references ${ref}, which is not on disk`);
+for (const [name, html] of Object.entries(pages)) {
+  for (const ref of [...html.matchAll(/(?:src|href)="(\.\/[^"]+)"/g)].map((m) => m[1])) {
+    try {
+      await readFile(resolve(ROOT, ref));
+    } catch {
+      problems.push(`BROKEN   ${name} references ${ref}, which is not on disk`);
+    }
   }
 }
 
-console.log(`module graph: ${files.size} files reachable from ${ENTRY}`);
+console.log(`module graph: ${files.size} files reachable from ${ENTRIES.join(', ')}`);
 console.log(`import map:   ${Object.keys(map).length} entries -> ${JSON.stringify(map)}`);
 const real = problems.filter((p) => !p.startsWith('SKIP'));
 if (real.length) {
